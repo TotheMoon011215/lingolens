@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * 分片并行下载。这台机器单连接被限到 ~50KB/s，8 并发能到 3MB/s+。
+ * 分片并行下载。部分网络环境下单连接会被限速到 ~50KB/s，多并发能跑满带宽。
  * 用法: node tools/fetch.js <url> <out> [parts]
  */
 const fs = require('fs');

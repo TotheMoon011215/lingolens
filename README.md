@@ -90,7 +90,7 @@ copy config.example.json config.json
 
 | 键 | 说明 |
 |---|---|
-| `apiKey` | DeepSeek API Key，仅存本机 |
+| `apiKey` | DeepSeek API Key，仅保存在本地 |
 | `baseUrl` / `model` | 默认 `https://api.deepseek.com` / `deepseek-flash` |
 | `hotkeys` | 四个功能的全局快捷键 |
 | `speechRoot` | 实时字幕引擎目录（留空 = 不用字幕） |
