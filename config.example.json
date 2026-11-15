@@ -1,0 +1,15 @@
+{
+  "apiKey": "",
+  "baseUrl": "https://api.deepseek.com",
+  "model": "deepseek-flash",
+  "accent": "us",
+  "hotkeys": {
+    "lookup": "Alt+X",
+    "shot": "Alt+S",
+    "input": "Alt+Q",
+    "live": "Alt+L"
+  },
+  "speechRoot": "",
+  "speechSource": "system",
+  "speechModel": ""
+}

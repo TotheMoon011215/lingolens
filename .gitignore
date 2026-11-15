@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# local config with the DeepSeek API key - never commit
+config.json
+
+# large generated dictionary (build with core/dict-build.js)
+data/dict.bin
+data/ecdict.csv
+data/ecdict.tgz
+data/pkg/
+
+# offline OCR model (download with tools/setup.ps1)
+data/tessdata/
+data/tessdata-hq/
+data/tesscache/
+
+# personal data: transcripts, logs, screenshots
+data/transcript/
+data/*.log
+data/*.png
+
+# build output and local shortcuts
+native/*.exe
+*.lnk
+
+.DS_Store
+Thumbs.db

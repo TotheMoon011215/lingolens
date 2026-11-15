@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>live</title>
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  :root{
+    --fg:#eef0f4; --muted:#98a0ae; --dim:#6b7280;
+    --accent:#7aa2f7; --ok:#5bd18b; --warn:#f0a35e;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:transparent;overflow:hidden}
+  body{font:14px/1.5 "Segoe UI","Microsoft YaHei UI",system-ui,sans-serif;color:var(--fg)}
+
+  #bar{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    background:rgba(16,17,21,.97);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:12px;overflow:hidden;
+    box-shadow:0 14px 40px rgba(0,0,0,.55);
+  }
+  header{
+    display:flex;align-items:center;gap:9px;padding:7px 10px 6px 13px;
+    border-bottom:1px solid rgba(255,255,255,.06);flex:0 0 auto;
+    -webkit-app-region:drag;
+  }
+  #dot{width:7px;height:7px;border-radius:50%;background:var(--dim);flex:0 0 auto}
+  #dot.on{background:var(--ok);box-shadow:0 0 8px rgba(91,209,139,.8)}
+  #state{font-size:12px;color:var(--muted)}
+  #stats{margin-left:auto;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .btn{
+    -webkit-app-region:no-drag;background:transparent;border:0;color:var(--muted);
+    width:26px;height:24px;border-radius:6px;cursor:pointer;
+    display:grid;place-items:center;
+  }
+  .btn:hover{background:rgba(255,255,255,.09);color:#fff}
+  .btn .icon{width:15px;height:15px}
+  #levels{display:flex;gap:2px;align-items:flex-end;height:12px;margin-left:2px}
+  #levels i{width:3px;background:rgba(122,162,247,.30);border-radius:2px;height:2px;transition:height .12s}
+
+  /* 滚动字幕：新句在底部，旧句往上挤 */
+  main{
+    flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;
+    padding:10px 16px 12px;
+    display:flex;flex-direction:column;justify-content:flex-end;gap:10px;
+  }
+  main::-webkit-scrollbar{width:6px}
+  main::-webkit-scrollbar-thumb{background:rgba(255,255,255,.10);border-radius:3px}
+
+  .entry{
+    padding-left:9px;border-left:2px solid transparent;
+    transition:opacity .18s var(--ease);
+  }
+  .entry .en{
+    font-size:13.5px;line-height:1.5;color:#b9c2d4;
+    word-break:break-word;
+  }
+  .entry .zh{
+    font-size:18px;line-height:1.45;color:#fff;font-weight:500;
+    margin-top:1px;word-break:break-word;
+  }
+  .entry:last-child{border-left-color:var(--accent)}
+  .entry:not(:last-child){opacity:.52}
+  .entry:not(:last-child) .zh{font-size:15px}
+  .entry .zh.pending{color:var(--dim);font-size:12px;font-style:italic;font-weight:400}
+
+  .entry .w{cursor:pointer;border-radius:2px;padding:0 1px}
+  .entry .w:hover{background:rgba(122,162,247,.30);color:#fff}
+
+  .caret{
+    display:inline-block;width:6px;height:15px;border-radius:1px;
+    background:var(--accent);vertical-align:-2px;margin-left:2px;
+    animation:blink 1s steps(2) infinite;
+  }
+  @keyframes blink{50%{opacity:0}}
+
+  footer{
+    flex:0 0 auto;display:flex;align-items:center;gap:8px;
+    padding:0 13px 7px;font-size:11px;color:var(--dim);
+  }
+  footer .hint{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #err{color:var(--warn)}
+</style>
+</head>
+<body>
+<div id="bar">
+  <header>
+    <span id="dot"></span>
+    <span id="state">未开始</span>
+    <div id="levels"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <span id="stats"></span>
+    <button class="btn" id="btnRun" title="开始 / 停止"><i class="icon" data-icon="play"></i></button>
+    <button class="btn" id="btnHist" title="记录"><i class="icon" data-icon="history"></i></button>
+    <button class="btn" id="btnSrc" title="切换音源"><i class="icon" data-icon="mic"></i></button>
+    <button class="btn" id="btnClose" title="关闭 (Esc)"><i class="icon" data-icon="x"></i></button>
+  </header>
+
+  <main id="log"></main>
+
+  <footer><span class="hint" id="hint">点英文里的任意词即可查词</span><span id="err"></span></footer>
+</div>
+
+<script src="icons.js"></script>
+<script>
+const { ipcRenderer } = require('electron');
+const $ = (id) => document.getElementById(id);
+const logEl = $('log');
+const stateEl = $('state');
+const dot = $('dot');
+const statsEl = $('stats');
+const errEl = $('err');
+const levels = $('levels').children;
+
+let running = false;      // 会话是否在跑（started/stopped 驱动）
+let speaking = false;     // 当前是否有人在说话（listening 驱动）
+let source = 'system';
+let curSid = -1;
+let asrMs = 0, mtMs = 0;
+let errTimer = null;
+
+const entries = new Map();   // sid -> { root, en, zh, enText, zhText, renderedEn }
+const order = [];            // 创建顺序的 sid
+const merges = new Map();    // sid -> { target, base }  续句并回上一句
+
+if (window.mountIcons) window.mountIcons(document);
+
+/* ---------- 状态 ---------- */
+function setRunning(on) {
+  running = on;
+  dot.className = on ? 'on' : '';
+  const b = $('btnRun');
+  b.innerHTML = '<i class="icon" data-icon="' + (on ? 'square' : 'play') + '"></i>';
+  if (window.mountIcons) window.mountIcons(b);
+}
+
+/** 把还没等到译文的条目收尾，避免永久显示“译文中…” */
+function finalizePending() {
+  const last = logEl.lastElementChild;
+  for (const e of entries.values()) {
+    renderZh(e, e.root === last);
+  }
+}
+function setState(t) { stateEl.textContent = t; }
+function setStats() {
+  const p = [];
+  if (asrMs) p.push('识别 ' + asrMs + 'ms');
+  if (mtMs) p.push('翻译 ' + mtMs + 'ms');
+  statsEl.textContent = p.join(' · ');
+}
+function showErr(t) {
+  errEl.textContent = t;
+  clearTimeout(errTimer);
+  errTimer = setTimeout(() => { errEl.textContent = ''; }, 8000);
+}
+function setLevel(v) {
+  const n = levels.length;
+  for (let i = 0; i < n; i++) {
+    levels[i].style.height = Math.max(2, Math.round(Math.min(1, v * (1 + i * 0.15)) * 12)) + 'px';
+  }
+}
+
+/* ---------- 字幕条目 ---------- */
+function ensureEntry(sid) {
+  let e = entries.get(sid);
+  if (e) return e;
+
+  const root = document.createElement('div');
+  root.className = 'entry';
+  const en = document.createElement('div');
+  en.className = 'en';
+  const zh = document.createElement('div');
+  zh.className = 'zh pending';
+  zh.textContent = '译文中…';
+  root.appendChild(en);
+  root.appendChild(zh);
+  logEl.appendChild(root);
+
+  e = { root, en, zh, enText: '', zhText: '', renderedEn: '' , mergedChecked: false };
+  entries.set(sid, e);
+  order.push(sid);
+
+  // 垃圾回收：DOM 和 map 都只留最近 20 条
+  while (logEl.children.length > 20) logEl.removeChild(logEl.firstElementChild);
+  if (entries.size > 40) {
+    const keys = [...entries.keys()].sort((a, b) => a - b);
+    for (const k of keys.slice(0, keys.length - 20)) entries.delete(k);
+  }
+  return e;
+}
+
+function renderEn(e) {
+  if (!e.enText) { e.en.innerHTML = ''; e.renderedEn = ''; return; }
+  if (e.enText === e.renderedEn) return;   // 同一句不重绘，避免打断悬停
+  e.renderedEn = e.enText;
+
+  const frag = document.createDocumentFragment();
+  const words = e.enText.split(/\s+/);
+  words.forEach((w, i) => {
+    if (!w) return;
+    const core = w.replace(/^[^A-Za-z']+|[^A-Za-z']+$/g, '');
+    const span = document.createElement('span');
+    span.textContent = w;
+    if (core && /^[A-Za-z][A-Za-z'-]*$/.test(core)) {
+      span.className = 'w';
+      span.addEventListener('click', () => {
+        const r = span.getBoundingClientRect();
+        ipcRenderer.send('live:word', { word: core, sentence: e.enText, x: r.right, y: r.top, w: r.width, h: r.height });
+      });
+    }
+    frag.appendChild(span);
+    if (i < words.length - 1) frag.appendChild(document.createTextNode(' '));
+  });
+  e.en.innerHTML = '';
+  e.en.appendChild(frag);
+}
+
+function renderZh(e, isLast) {
+  if (e.zhText) {
+    e.zh.className = 'zh';
+    e.zh.textContent = e.zhText;
+    if (isLast && running) {
+      const c = document.createElement('span');
+      c.className = 'caret';
+      e.zh.appendChild(c);
+    }
+  } else if (running && isLast) {
+    e.zh.className = 'zh pending';
+    e.zh.textContent = '译文中…';
+  } else {
+    e.zh.className = 'zh';
+    e.zh.textContent = '';
+  }
+}
+
+function renderEntry(sid) {
+  const e = entries.get(sid);
+  if (!e) return;
+  renderEn(e);
+  renderZh(e, e.root === logEl.lastElementChild);
+}
+
+/** 结构变化后统一重绘：保证"只有最后一条带光标" */
+function renderAllEntries() {
+  const last = logEl.lastElementChild;
+  for (const e of entries.values()) {
+    renderEn(e);
+    renderZh(e, e.root === last);
+  }
+}
+
+/** 新片段是不是上一句在 18 秒处被切断的续句：
+ *  上一句没有句末标点 + 本片段小写开头 */
+function isContinuation(prevText, nextText) {
+  const prev = String(prevText || '').trim();
+  const next = String(nextText || '').trim();
+  if (!prev || !next) return false;
+  if (/[.?!…]["')\]]?$/.test(prev)) return false;
+  return /[a-z]/.test(next[0]);
+}
+
+function firstHypothesis(sid, text) {
+  const e = entries.get(sid);
+  if (!e) return;
+  if (!e.mergedChecked) {
+    e.mergedChecked = true;
+    const idx = order.indexOf(sid);
+    const prevSid = idx > 0 ? order[idx - 1] : null;
+    const prev = prevSid != null ? entries.get(prevSid) : null;
+    if (prev && isContinuation(prev.enText, text)) {
+      // 把这半句并回上一句，而不是新起一行
+      e.root.remove();
+      entries.delete(sid);
+      order.splice(idx, 1);
+      merges.set(sid, { target: prevSid, base: prev.enText });
+      prev.enText = (prev.enText + ' ' + text).trim();
+      renderEn(prev);
+      pinBottom();
+      return;
+    }
+  }
+  e.enText = text;
+  renderEntry(sid);
+  pinBottom();
+}
+
+function pinBottom() {
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function resetAll() {
+  entries.clear();
+  order.length = 0;
+  merges.clear();
+  logEl.innerHTML = '';
+  curSid = -1;
+}
+
+/* ---------- 事件 ---------- */
+ipcRenderer.on('live:event', (_e, ev) => {
+  switch (ev.e) {
+    case 'ready':
+      source = ev.source || 'system';
+      setState(ev.model_missing ? '缺少识别模型' : '就绪');
+      if (ev.model_missing) showErr('找不到语音识别模型');
+      break;
+    case 'status': setState(ev.text || ''); break;
+
+    case 'started':
+      setRunning(true);
+      speaking = false;
+      resetAll();
+      setState('正在聆听');
+      break;
+    case 'stopped':
+      setRunning(false);
+      speaking = false;
+      finalizePending();
+      setState('已停止');
+      break;
+    case 'exit':
+      setRunning(false);
+      speaking = false;
+      finalizePending();
+      setState('引擎已退出');
+      break;
+    case 'listening':
+      speaking = Boolean(ev.on);
+      if (speaking && !running) setRunning(true);   // 兜底：没收到 started
+      if (running) setState(speaking ? '正在聆听' : '等待下一句…');
+      break;
+    case 'level': setLevel(ev.v || 0); break;
+
+    case 'hypothesis': {
+      if (curSid < 0) curSid = 0;
+      const m = merges.get(curSid);
+      if (m) {
+        const t = entries.get(m.target);
+        if (t) { t.enText = (m.base + ' ' + (ev.text || '')).trim(); renderEn(t); pinBottom(); }
+        break;
+      }
+      ensureEntry(curSid);
+      firstHypothesis(curSid, ev.text || '');
+      break;
+    }
+    case 'sentence_start':
+      curSid = ev.sid;
+      ensureEntry(curSid);
+      renderAllEntries();
+      pinBottom();
+      break;
+    case 'zh_delta': {
+      const m = merges.get(ev.sid);
+      const target = m ? m.target : ev.sid;
+      const e = entries.get(target);
+      if (!e) break;
+      e.zhText += ev.delta || '';
+      renderEntry(target);
+      pinBottom();
+      break;
+    }
+    case 'pair': {
+      const m = merges.get(ev.sid);
+      const target = m ? m.target : ev.sid;
+      const e = entries.get(target);
+      if (!e) break;
+      // 英文以 hypothesis（整句）为准；pair 只是其中一段，绝不覆盖
+      if (!e.enText && ev.en) e.enText = ev.en;
+      // 中文按段累加：流式增量已经追加过的就不要重复
+      if (ev.zh && !e.zhText.endsWith(ev.zh)) e.zhText += ev.zh;
+      renderEntry(target);
+      pinBottom();
+      break;
+    }
+    case 'stats':
+      if (ev.asr_ms) asrMs = ev.asr_ms;
+      if (ev.mt_first_ms) mtMs = ev.mt_first_ms;
+      setStats();
+      break;
+    case 'error': showErr(ev.text || '出错'); break;
+  }
+});
+
+/* ---------- 按钮 ---------- */
+$('btnRun').addEventListener('click', () => {
+  ipcRenderer.send(running ? 'live:stop' : 'live:start', { source });
+});
+$('btnHist').addEventListener('click', () => ipcRenderer.send('live:open-home'));
+$('btnSrc').addEventListener('click', () => {
+  source = source === 'system' ? 'microphone' : 'system';
+  $('hint').textContent = (source === 'system' ? '系统声音' : '麦克风') + ' · 点英文里的词查词';
+  ipcRenderer.send('live:restart', { source });
+});
+$('btnClose').addEventListener('click', () => ipcRenderer.send('live:close'));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') ipcRenderer.send('live:close'); });
+</script>
+</body>
+</html>

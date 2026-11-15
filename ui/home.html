@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>LingoLens</title>
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  #app { height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
+
+  /* ---------- 标题栏 ---------- */
+  .titlebar {
+    height: 38px; flex: 0 0 auto;
+    display: flex; align-items: center; gap: var(--s2);
+    padding: 0 6px 0 14px;
+    border-bottom: 1px solid var(--line);
+    -webkit-app-region: drag;
+  }
+  .mark {
+    width: 9px; height: 9px; border-radius: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px rgba(124, 147, 238, .12);
+  }
+  .name { font-size: var(--t-12); font-weight: 600; letter-spacing: .01em; }
+  .tag { font-size: var(--t-11); color: var(--dim); margin-left: 2px; }
+  .titlebar .grow { flex: 1; }
+  .winbtn {
+    -webkit-app-region: no-drag;
+    width: 30px; height: 24px; border: 0; border-radius: var(--r-sm);
+    background: transparent; color: var(--muted); cursor: pointer;
+    display: grid; place-items: center;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  }
+  .winbtn:hover { background: rgba(255, 255, 255, .07); color: var(--fg); }
+  .winbtn.danger:hover { background: #b3382c; color: #fff; }
+  .winbtn .icon { width: 13px; height: 13px; }
+
+  /* ---------- 外壳 ---------- */
+  .shell { flex: 1; display: flex; min-height: 0; }
+
+  nav {
+    width: 172px; flex: 0 0 auto;
+    border-right: 1px solid var(--line);
+    padding: var(--s3) var(--s2);
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .nav {
+    position: relative;
+    display: flex; align-items: center; gap: 10px;
+    height: 34px; padding: 0 10px;
+    border: 0; border-radius: var(--r-sm);
+    background: transparent; color: var(--muted);
+    font-size: var(--t-13); cursor: pointer; width: 100%; text-align: left;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  }
+  .nav:hover { background: rgba(255, 255, 255, .04); color: var(--fg); }
+  .nav.on { background: var(--accent-soft); color: var(--accent); }
+  .nav.on::before {
+    content: ""; position: absolute; left: 0; top: 9px; bottom: 9px;
+    width: 2px; border-radius: 2px; background: var(--accent);
+  }
+  .nav .icon { width: 15px; height: 15px; }
+
+  .nav-foot {
+    margin-top: auto; padding: var(--s3) 10px var(--s2);
+    border-top: 1px solid var(--line);
+    font-size: var(--t-11); line-height: 1.9; color: var(--dim);
+  }
+  .nav-foot b { display: block; color: var(--muted); font-weight: 500; margin-bottom: 2px; }
+
+  main {
+    flex: 1; min-width: 0; overflow-y: auto;
+    padding: var(--s6) var(--s6) var(--s7);
+  }
+  main::-webkit-scrollbar { width: 10px; }
+  main::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .08); border-radius: 5px; }
+
+  .view { display: none; }
+  .view.on { display: block; animation: fade 180ms var(--ease); }
+  @keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+  h2 {
+    font-size: var(--t-19); font-weight: 600;
+    letter-spacing: -.012em; margin-bottom: 6px;
+  }
+  .sub { font-size: var(--t-12); color: var(--dim); margin-bottom: var(--s5); max-width: 60ch; }
+
+  /* ---------- 功能卡 ---------- */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); max-width: 780px; }
+  .tile {
+    display: flex; align-items: flex-start; gap: var(--s3);
+    padding: var(--s4); text-align: left; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+    transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+  }
+  .tile:hover { border-color: var(--line-2); background: var(--surface-2); }
+  .tile:hover .go { opacity: 1; transform: none; }
+  .tile-icon {
+    width: 32px; height: 32px; flex: 0 0 auto;
+    display: grid; place-items: center;
+    border: 1px solid var(--line); border-radius: var(--r-sm);
+    color: var(--accent); background: rgba(124, 147, 238, .06);
+  }
+  .tile-icon .icon { width: 17px; height: 17px; }
+  .tile-body { min-width: 0; }
+  .tile-title {
+    display: flex; align-items: center; gap: var(--s2);
+    font-size: var(--t-13); font-weight: 600; color: var(--fg);
+  }
+  .tile-desc { display: block; margin-top: 5px; font-size: var(--t-12); color: var(--dim); line-height: 1.6; }
+  .go {
+    margin-left: auto; align-self: center; color: var(--dim);
+    opacity: 0; transform: translateX(-2px);
+    transition: opacity var(--fast) var(--ease), transform var(--fast) var(--ease);
+  }
+  .go .icon { width: 14px; height: 14px; }
+
+  /* ---------- 区块头 ---------- */
+  .sec-head {
+    display: flex; align-items: baseline; gap: var(--s2);
+    margin: var(--s6) 0 var(--s3);
+  }
+  .sec-head .h { font-size: var(--t-13); font-weight: 600; }
+  .sec-head .meta { font-size: var(--t-11); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .sec-head .grow { flex: 1; }
+
+  /* ---------- 列表 ---------- */
+  .rows {
+    border: 1px solid var(--line); border-radius: var(--r-md);
+    background: var(--surface); overflow: hidden;
+  }
+  .row {
+    display: flex; gap: var(--s3); padding: 10px var(--s4);
+    border-bottom: 1px solid var(--line); cursor: pointer;
+    transition: background var(--fast) var(--ease);
+  }
+  .row:last-child { border-bottom: 0; }
+  .row:hover { background: rgba(255, 255, 255, .03); }
+  .row .time {
+    flex: 0 0 54px; padding-top: 2px;
+    font: var(--t-11)/1.4 var(--mono); color: var(--dim);
+  }
+  .row .cell { min-width: 0; }
+  .row .en { font-size: var(--t-13); color: #ccd2de; }
+  .row .zh { font-size: var(--t-13); color: var(--fg); margin-top: 2px; }
+  .empty { padding: var(--s5); text-align: center; font-size: var(--t-12); color: var(--dim); }
+
+  /* ---------- 控件 ---------- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 13px;
+    border: 1px solid var(--line); border-radius: var(--r-sm);
+    background: rgba(255, 255, 255, .04); color: var(--fg);
+    font-size: var(--t-12); cursor: pointer;
+    transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  }
+  .btn:hover { background: rgba(255, 255, 255, .08); border-color: var(--line-2); }
+  .btn .icon { width: 14px; height: 14px; }
+  .btn.primary {
+    background: var(--accent); color: var(--accent-ink);
+    border-color: transparent; font-weight: 600; padding: 0 16px;
+  }
+  .btn.primary:hover { filter: brightness(1.07); background: var(--accent); }
+
+  .seg {
+    display: inline-flex; padding: 2px; gap: 2px;
+    background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm);
+  }
+  .seg button {
+    height: 26px; padding: 0 11px; border: 0; border-radius: 4px;
+    background: transparent; color: var(--muted); font-size: var(--t-12); cursor: pointer;
+    transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+  }
+  .seg button:hover { color: var(--fg); }
+  .seg button.on { background: var(--raised); color: var(--fg); }
+
+  .bar {
+    display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap;
+    padding: var(--s3) var(--s4);
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+    max-width: 780px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); flex: 0 0 auto; }
+  .dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(90, 199, 140, .14); }
+  .state { font-size: var(--t-12); color: var(--muted); min-width: 96px; }
+  .bar .grow { flex: 1; }
+  .stat { font: var(--t-11)/1 var(--mono); color: var(--dim); }
+
+  select {
+    height: 30px; padding: 0 8px;
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: var(--r-sm); color: var(--fg); font: inherit; font-size: var(--t-12);
+    outline: 0; cursor: pointer;
+  }
+
+  /* ---------- 快捷键录制 ---------- */
+  .keys {
+    max-width: 520px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden;
+  }
+  .key-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px var(--s4); border-bottom: 1px solid var(--line);
+    font-size: var(--t-13); color: var(--muted);
+  }
+  .key-row:last-child { border-bottom: 0; }
+  .rec {
+    min-width: 102px; height: 27px; padding: 0 10px;
+    border: 1px solid var(--line); border-radius: var(--r-sm);
+    background: var(--surface-2); color: var(--fg);
+    font: var(--t-11)/1 var(--mono); cursor: pointer;
+    transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease);
+  }
+  .rec:hover { border-color: var(--line-2); }
+  .rec.recording { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .hint-line { margin-top: 8px; max-width: 520px; font-size: var(--t-11); color: var(--dim); line-height: 1.7; }
+
+  /* ---------- 设置 ---------- */
+  .field { max-width: 520px; margin-bottom: var(--s5); }
+  .field > label {
+    display: block; margin-bottom: 7px;
+    font-size: var(--t-12); color: var(--muted);
+  }
+  .field input[type=password] {
+    width: 100%; height: 36px; padding: 0 11px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sm);
+    color: var(--fg); font: inherit; font-size: var(--t-13); outline: 0;
+    transition: border-color var(--fast) var(--ease);
+  }
+  .field input[type=password]:focus { border-color: var(--accent); }
+  .meta-row {
+    display: flex; gap: var(--s2); align-items: baseline;
+    font-size: var(--t-12); color: var(--muted); margin-bottom: 6px;
+  }
+  .meta-row b { color: var(--fg); font-weight: 500; word-break: break-all; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="titlebar">
+    <span class="mark"></span>
+    <span class="name">LingoLens</span>
+    <span class="tag">查词 · 实时字幕</span>
+    <span class="grow"></span>
+    <button class="winbtn" data-win="min" title="最小化"><i class="icon" data-icon="minus"></i></button>
+    <button class="winbtn" data-win="max" title="最大化"><i class="icon" data-icon="maximize-2"></i></button>
+    <button class="winbtn danger" data-win="close" title="关闭"><i class="icon" data-icon="x"></i></button>
+  </header>
+
+  <div class="shell">
+    <nav>
+      <button class="nav on" data-view="home"><i class="icon" data-icon="house"></i><span>查词</span></button>
+      <button class="nav" data-view="live"><i class="icon" data-icon="captions"></i><span>实时字幕</span></button>
+      <button class="nav" data-view="settings"><i class="icon" data-icon="settings"></i><span>设置</span></button>
+      <div class="nav-foot">
+        <b>快捷键</b>
+        <span id="navKeys">Alt+X 划词 · Alt+S 截图<br />Alt+L 字幕 · Alt+Q 手输</span>
+      </div>
+    </nav>
+
+    <main>
+      <!-- 查词 -->
+      <section class="view on" id="v-home">
+        <h2>随手查词</h2>
+        <div class="sub">四种取词方式，选中的什么就查什么；不打断手上正在做的事。</div>
+
+        <div class="grid">
+          <button class="tile" data-act="lookup">
+            <span class="tile-icon"><i class="icon" data-icon="mouse-pointer-2"></i></span>
+            <span class="tile-body">
+              <span class="tile-title">划词查词 <kbd data-kbd="lookup">Alt+X</kbd></span>
+              <span class="tile-desc">选中任意程序里的英文，卡片贴着鼠标浮出</span>
+            </span>
+            <span class="go"><i class="icon" data-icon="arrow-up-right"></i></span>
+          </button>
+
+          <button class="tile" data-act="shot">
+            <span class="tile-icon"><i class="icon" data-icon="scan-line"></i></span>
+            <span class="tile-body">
+              <span class="tile-title">截图取词 <kbd data-kbd="shot">Alt+S</kbd></span>
+              <span class="tile-desc">框住画面里的英文，冻结后鼠标扫过哪个词查哪个</span>
+            </span>
+            <span class="go"><i class="icon" data-icon="arrow-up-right"></i></span>
+          </button>
+
+          <button class="tile" data-act="input">
+            <span class="tile-icon"><i class="icon" data-icon="keyboard"></i></span>
+            <span class="tile-body">
+              <span class="tile-title">手动查词 <kbd data-kbd="input">Alt+Q</kbd></span>
+              <span class="tile-desc">想到一个词、或者要核对拼写，直接敲进来</span>
+            </span>
+            <span class="go"><i class="icon" data-icon="arrow-up-right"></i></span>
+          </button>
+
+          <button class="tile" data-act="live">
+            <span class="tile-icon"><i class="icon" data-icon="audio-lines"></i></span>
+            <span class="tile-body">
+              <span class="tile-title">实时字幕 <kbd data-kbd="live">Alt+L</kbd></span>
+              <span class="tile-desc">把正在听到的英文变成中文字幕，点词即查</span>
+            </span>
+            <span class="go"><i class="icon" data-icon="arrow-up-right"></i></span>
+          </button>
+        </div>
+
+        <div class="sec-head">
+          <span class="h">最近听到</span>
+          <span class="meta" id="recentCount"></span>
+          <span class="grow"></span>
+          <button class="btn" id="recentMore">全部记录</button>
+        </div>
+        <div class="rows" id="recentRows"><div class="empty">还没有记录 · 用「实时字幕」听一段</div></div>
+      </section>
+
+      <!-- 实时字幕 -->
+      <section class="view" id="v-live">
+        <h2>实时字幕</h2>
+        <div class="sub">听电脑正在播放的声音，或听麦克风。识别在本机完成，只有文字会被发出去翻译。</div>
+
+        <div class="bar">
+          <span class="dot" id="liveDot"></span>
+          <span class="state" id="liveState">未开始</span>
+          <button class="btn primary" id="liveToggle">开始</button>
+          <div class="seg" id="liveSrc">
+            <button data-src="system" class="on">系统声音</button>
+            <button data-src="microphone">麦克风</button>
+          </div>
+          <span class="grow"></span>
+          <span class="stat" id="liveStats"></span>
+        </div>
+
+        <div class="sec-head">
+          <span class="h">记录</span>
+          <select id="histDate"></select>
+          <span class="meta" id="histCount"></span>
+          <span class="grow"></span>
+          <button class="btn" id="histExport"><i class="icon" data-icon="download"></i>导出 Markdown</button>
+        </div>
+        <div class="rows" id="histRows"><div class="empty">还没有记录</div></div>
+      </section>
+
+      <!-- 设置 -->
+      <section class="view" id="v-settings">
+        <h2>设置</h2>
+        <div class="sub">改完立即生效，不需要重启。</div>
+
+        <div class="field">
+          <label>DeepSeek API Key · 查词解释与字幕翻译共用</label>
+          <input type="password" id="cfgKey" placeholder="sk-..." spellcheck="false" />
+        </div>
+
+        <div class="field">
+          <label>默认音源</label>
+          <div class="seg" id="cfgSource">
+            <button data-src="system">系统声音</button>
+            <button data-src="microphone">麦克风</button>
+          </div>
+        </div>
+
+        <button class="btn primary" id="cfgSave">保存</button>
+        <span id="cfgMsg" style="margin-left:10px;font-size:12px;color:var(--warn)"></span>
+
+        <div class="sec-head"><span class="h">快捷键</span><span class="meta">点击后按下新组合</span></div>
+        <div class="keys" id="keyList">
+          <div class="key-row"><span>划词查词</span><button class="rec" data-k="lookup">Alt+X</button></div>
+          <div class="key-row"><span>截图取词</span><button class="rec" data-k="shot">Alt+S</button></div>
+          <div class="key-row"><span>手动查词</span><button class="rec" data-k="input">Alt+Q</button></div>
+          <div class="key-row"><span>实时字幕</span><button class="rec" data-k="live">Alt+L</button></div>
+        </div>
+        <div class="hint-line">必须包含 Ctrl / Alt / Shift 之一；按 Esc 取消录制。改完点上面的「保存」。</div>
+
+        <div class="sec-head"><span class="h">关于</span></div>
+        <div class="meta-row">语音引擎<b id="cfgRoot">—</b></div>
+        <div class="meta-row">快捷键<b>Alt+A 划词 · Alt+S 截图 · Alt+L 字幕 · Alt+Q 手输</b></div>
+        <div class="meta-row">版本<b>0.3 · Electron + faster-whisper</b></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script src="icons.js"></script>
+<script>
+const { ipcRenderer } = require('electron');
+const $ = (id) => document.getElementById(id);
+
+if (window.mountIcons) window.mountIcons(document);
+document.querySelectorAll('[data-win]').forEach((b) => {
+  b.onclick = () => ipcRenderer.send('home:win', b.dataset.win);
+});
+
+/* 导航 */
+document.querySelectorAll('.nav').forEach((btn) => {
+  btn.onclick = () => {
+    document.querySelectorAll('.nav').forEach((b) => b.classList.toggle('on', b === btn));
+    document.querySelectorAll('.view').forEach((v) => v.classList.toggle('on', v.id === 'v-' + btn.dataset.view));
+    if (btn.dataset.view === 'live') refreshHistory();
+  };
+});
+
+document.querySelectorAll('.tile').forEach((t) => {
+  t.onclick = () => ipcRenderer.send('home:action', t.dataset.act);
+});
+
+/* 实时字幕控制 */
+let liveRunning = false;
+let liveSource = 'system';
+
+function setLive(on, text) {
+  liveRunning = on;
+  $('liveDot').className = 'dot' + (on ? ' on' : '');
+  $('liveToggle').textContent = on ? '停止' : '开始';
+  if (text) $('liveState').textContent = text;
+}
+
+$('liveToggle').onclick = () => {
+  ipcRenderer.send(liveRunning ? 'live:stop' : 'live:start', { source: liveSource });
+};
+$('liveSrc').querySelectorAll('button').forEach((b) => {
+  b.onclick = () => {
+    liveSource = b.dataset.src;
+    $('liveSrc').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    ipcRenderer.send('live:restart', { source: liveSource });
+    refreshHistory();
+  };
+});
+
+/* 记录 */
+let curDate = null;
+
+async function refreshHistory() {
+  const dates = await ipcRenderer.invoke('transcript:list');
+  const sel = $('histDate');
+  const keep = curDate || (dates[0] && dates[0].date);
+  sel.innerHTML = dates.length
+    ? dates.map((d) => `<option value="${d.date}">${d.date}（${d.count}）</option>`).join('')
+    : '<option value="">暂无</option>';
+  if (keep) sel.value = keep;
+  curDate = sel.value || null;
+  await loadDay();
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function rowHtml(r) {
+  return `<div class="row" data-copy="${encodeURIComponent(r.en + '\\n' + r.zh)}">
+      <span class="time">${r.t}</span>
+      <span class="cell"><div class="en">${esc(r.en)}</div>${r.zh ? `<div class="zh">${esc(r.zh)}</div>` : ''}</span>
+    </div>`;
+}
+
+function bindRowClicks(root) {
+  root.querySelectorAll('.row').forEach((el) => {
+    el.onclick = () => {
+      ipcRenderer.invoke('copy', decodeURIComponent(el.dataset.copy));
+      el.style.background = 'var(--accent-soft)';
+      setTimeout(() => { el.style.background = ''; }, 320);
+    };
+  });
+}
+
+async function loadDay() {
+  const date = $('histDate').value;
+  if (!date) {
+    $('histRows').innerHTML = '<div class="empty">还没有记录</div>';
+    $('histCount').textContent = '';
+    return;
+  }
+  const rows = await ipcRenderer.invoke('transcript:load', date);
+  $('histCount').textContent = rows.length ? rows.length + ' 条' : '';
+  if (!rows.length) { $('histRows').innerHTML = '<div class="empty">这一天还没有记录</div>'; return; }
+  $('histRows').innerHTML = rows.map(rowHtml).join('');
+  bindRowClicks($('histRows'));
+  $('histRows').scrollTop = $('histRows').scrollHeight;
+}
+
+async function refreshRecent() {
+  const today = await ipcRenderer.invoke('transcript:today');
+  const rows = await ipcRenderer.invoke('transcript:load', today);
+  $('recentCount').textContent = rows.length ? '今天 ' + rows.length + ' 条' : '';
+  const last = rows.slice(-3).reverse();
+  if (!last.length) {
+    $('recentRows').innerHTML = '<div class="empty">还没有记录 · 用「实时字幕」听一段</div>';
+    return;
+  }
+  $('recentRows').innerHTML = last.map(rowHtml).join('');
+  bindRowClicks($('recentRows'));
+}
+
+$('recentMore').onclick = () => document.querySelector('.nav[data-view="live"]').click();
+$('histDate').onchange = () => { curDate = $('histDate').value; loadDay(); };
+$('histExport').onclick = () => ipcRenderer.send('transcript:export', $('histDate').value);
+
+/* 设置 */
+async function loadConfig() {
+  const cfg = await ipcRenderer.invoke('config:get');
+  $('cfgKey').value = cfg.apiKey || '';
+  $('cfgRoot').textContent = cfg.speechRoot || '—';
+  liveSource = cfg.speechSource || 'system';
+  hotkeys = cfg.hotkeys || {};
+  renderKeys();
+  $('cfgSource').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.src === liveSource));
+  $('liveSrc').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.src === liveSource));
+}
+
+/* ---------- 快捷键自定义 ---------- */
+let hotkeys = {};
+let recording = null;
+
+function accelOf(e) {
+  const mods = [];
+  if (e.ctrlKey) mods.push('Ctrl');
+  if (e.altKey) mods.push('Alt');
+  if (e.shiftKey) mods.push('Shift');
+  if (e.metaKey) mods.push('Super');
+  const k = e.key;
+  if (['Control', 'Alt', 'Shift', 'Meta'].includes(k)) return null;
+  if (!mods.length) return null;
+  let key = k;
+  if (k === ' ') key = 'Space';
+  else if (k.length === 1) key = k.toUpperCase();
+  else if (k.startsWith('Arrow')) key = k.slice(5);
+  return mods.join('+') + '+' + key;
+}
+
+function humanize(acc) {
+  return String(acc || '').replace(/\+/g, '+');
+}
+
+function renderKeys() {
+  document.querySelectorAll('.rec').forEach((b) => {
+    const k = b.dataset.k;
+    if (!b.classList.contains('recording')) b.textContent = humanize(hotkeys[k] || '');
+  });
+  document.querySelectorAll('[data-kbd]').forEach((el) => {
+    el.textContent = hotkeys[el.dataset.kbd] || '';
+  });
+  const nk = $('navKeys');
+  if (nk) {
+    nk.innerHTML = `${hotkeys.lookup || ''} 划词 · ${hotkeys.shot || ''} 截图<br />`
+      + `${hotkeys.live || ''} 字幕 · ${hotkeys.input || ''} 手输`;
+  }
+}
+
+function stopRecord() {
+  if (recording) { recording.classList.remove('recording'); recording = null; }
+  renderKeys();
+}
+
+document.querySelectorAll('.rec').forEach((btn) => {
+  btn.onclick = () => {
+    stopRecord();
+    recording = btn;
+    btn.classList.add('recording');
+    btn.textContent = '按下组合键…';
+  };
+});
+
+document.addEventListener('keydown', (e) => {
+  if (!recording) return;
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.key === 'Escape') { stopRecord(); return; }
+  const acc = accelOf(e);
+  if (!acc) return;
+  hotkeys[recording.dataset.k] = acc;
+  stopRecord();
+}, true);
+$('cfgSource').querySelectorAll('button').forEach((b) => {
+  b.onclick = () => {
+    $('cfgSource').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    liveSource = b.dataset.src;
+  };
+});
+$('cfgSave').onclick = async () => {
+  const vals = Object.values(hotkeys).filter(Boolean);
+  const dup = vals.find((v, i) => vals.indexOf(v) !== i);
+  if (dup) {
+    $('cfgMsg').textContent = `「${dup}」被分配给了两个功能`;
+    return;
+  }
+  const res = await ipcRenderer.invoke('config:set', {
+    apiKey: $('cfgKey').value.trim(),
+    speechSource: liveSource,
+    hotkeys,
+  });
+  if (res && res.hotkeyFailures && res.hotkeyFailures.length) {
+    $('cfgMsg').textContent = `这些组合被别的程序占用：${res.hotkeyFailures.join('、')}`;
+    return;
+  }
+  $('cfgMsg').textContent = '';
+  $('cfgSave').textContent = '已保存';
+  setTimeout(() => { $('cfgSave').textContent = '保存'; }, 1200);
+};
+
+/* 事件 */
+ipcRenderer.on('home:speech', (_e, ev) => {
+  if (ev.e === 'listening') setLive(Boolean(ev.on), ev.on ? '正在聆听' : '已停止');
+  else if (ev.e === 'status') setLive(liveRunning, ev.text);
+  else if (ev.e === 'stats') {
+    const p = [];
+    if (ev.asr_ms) p.push('识别 ' + ev.asr_ms + 'ms');
+    if (ev.mt_first_ms) p.push('翻译 ' + ev.mt_first_ms + 'ms');
+    $('liveStats').textContent = p.join(' · ');
+  } else if (ev.e === 'error') setLive(liveRunning, ev.text);
+  else if (ev.e === 'exit') setLive(false, '引擎已退出');
+});
+
+ipcRenderer.on('transcript:new', async () => {
+  const date = await ipcRenderer.invoke('transcript:today');
+  if ($('histDate').value !== date) await refreshHistory();
+  else await loadDay();
+  await refreshRecent();
+});
+
+ipcRenderer.on('home:view', (_e, view) => {
+  const btn = document.querySelector(`.nav[data-view="${view}"]`);
+  if (btn) btn.click();
+});
+
+(async function init() {
+  await loadConfig();
+  await refreshHistory();
+  await refreshRecent();
+  const st = await ipcRenderer.invoke('home:state');
+  setLive(st.live, st.live ? '正在聆听' : '未开始');
+})();
+</script>
+</body>
+</html>

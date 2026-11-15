@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>frozen</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:transparent}
+  body{font:13px/1.4 "Segoe UI","Microsoft YaHei UI",sans-serif;color:#e8e9ed}
+  #shot{position:absolute;inset:0;overflow:hidden;border-radius:3px;
+        outline:1px solid rgba(122,162,247,.55);box-shadow:0 12px 40px rgba(0,0,0,.55)}
+  #img{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+  #words{position:absolute;inset:0}
+  .w{position:absolute;border-radius:2px;cursor:pointer;background:transparent;
+     transition:background .08s}
+  .w:hover{background:rgba(122,162,247,.28);box-shadow:0 0 0 1px rgba(122,162,247,.9) inset}
+  #bar{
+    position:absolute;right:6px;top:6px;display:flex;gap:6px;align-items:center;
+    opacity:1;transition:opacity .35s;
+  }
+  #bar.faded{opacity:0;pointer-events:none}
+  #bar.faded #close{pointer-events:auto}
+  #hint{
+    background:rgba(12,14,18,.9);border:1px solid rgba(255,255,255,.12);
+    border-radius:6px;padding:3px 9px;font-size:11.5px;color:#aeb4c0;white-space:nowrap;
+  }
+  #close{
+    background:rgba(12,14,18,.9);border:1px solid rgba(255,255,255,.14);
+    color:#c7cbd4;border-radius:6px;width:22px;height:22px;line-height:1;
+    font-size:14px;cursor:pointer;
+  }
+  #close:hover{color:#fff;border-color:rgba(122,162,247,.7)}
+</style>
+</head>
+<body>
+  <div id="shot">
+    <img id="img" />
+    <div id="words"></div>
+  </div>
+  <div id="bar">
+    <span id="hint">识别中…</span>
+    <button id="close" title="关闭 (Esc)">×</button>
+  </div>
+<script>
+const { ipcRenderer } = require('electron');
+const img = document.getElementById('img');
+const wordsEl = document.getElementById('words');
+const hint = document.getElementById('hint');
+let scale = 1;
+let lastSent = 0;
+
+function clearWords() { wordsEl.innerHTML = ''; }
+
+ipcRenderer.on('freeze:image', (_e, { dataUrl, scale: s }) => {
+  scale = s || 1;
+  img.src = dataUrl;
+  clearWords();
+  hint.textContent = '识别中…';
+});
+
+ipcRenderer.on('freeze:words', (_e, { words }) => {
+  clearWords();
+  if (!words || !words.length) {
+    hint.textContent = '没识别到文字';
+    return;
+  }
+  hint.textContent = words.length + ' 个词 · 悬停查看';
+  const bar = document.getElementById('bar');
+  bar.classList.remove('faded');
+  clearTimeout(window.__fade);
+  window.__fade = setTimeout(() => bar.classList.add('faded'), 2600);
+  const frag = document.createDocumentFragment();
+  for (const w of words) {
+    const b = w.bbox;
+    const d = document.createElement('div');
+    d.className = 'w';
+    d.style.left = (b.x0 / scale) + 'px';
+    d.style.top = (b.y0 / scale) + 'px';
+    d.style.width = Math.max(4, (b.x1 - b.x0) / scale) + 'px';
+    d.style.height = Math.max(4, (b.y1 - b.y0) / scale) + 'px';
+    d.title = w.text;
+    d.addEventListener('mouseenter', () => {
+      const now = Date.now();
+      if (now - lastSent < 90) return;
+      lastSent = now;
+      const r = d.getBoundingClientRect();
+      ipcRenderer.send('freeze:hover', { text: w.text, x: r.right, y: r.top, w: r.width, h: r.height });
+    });
+    frag.appendChild(d);
+  }
+  wordsEl.appendChild(frag);
+});
+
+document.getElementById('close').addEventListener('click', () => ipcRenderer.send('freeze:close'));
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') ipcRenderer.send('freeze:close'); });
+</script>
+</body>
+</html>

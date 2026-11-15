@@ -1,0 +1,90 @@
+/* LingoLens 设计基础件：功能主义 + 词典排印
+   一条强调色、8px 栅格、发丝线分隔；词头用衬线（词典的编辑感），界面用无衬线。 */
+
+@font-face {
+  font-family: "InterVar";
+  src: url("../assets/fonts/inter-latin.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* 字体 */
+  --sans: "InterVar", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", Georgia, "Songti SC", serif;
+  --mono: "Cascadia Mono", Consolas, "SF Mono", ui-monospace, monospace;
+
+  /* 色板：单一强调色，其余靠明度分层 */
+  --bg: #0e0f11;
+  --surface: #141619;
+  --surface-2: #191c20;
+  --raised: #1e2227;
+  --line: rgba(255, 255, 255, .065);
+  --line-2: rgba(255, 255, 255, .12);
+  --fg: #ecedf1;
+  --muted: #99a0ab;
+  --dim: #6a717c;
+  --accent: #7c93ee;
+  --accent-soft: rgba(124, 147, 238, .12);
+  --accent-ink: #0c0f16;
+  --ok: #5ac78c;
+  --warn: #dd9a55;
+
+  /* 字号 */
+  --t-11: 11px; --t-12: 12px; --t-13: 13px;
+  --t-15: 15px; --t-19: 19px; --t-26: 26px;
+
+  /* 间距：4px 基数 */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+
+  /* 圆角 */
+  --r-lg: 12px; --r-md: 9px; --r-sm: 6px;
+
+  --ease: cubic-bezier(.2, .7, .3, 1);
+  --fast: 140ms;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font: var(--t-13)/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection { background: rgba(124, 147, 238, .32); }
+
+/* 图标容器：统一 1.6px 描边、跟随 currentColor */
+.icon {
+  width: 16px; height: 16px;
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: -3px;
+}
+.icon svg { display: block; width: 100%; height: 100%; }
+
+kbd {
+  font: var(--t-11)/1 var(--mono);
+  color: var(--muted);
+  background: rgba(255, 255, 255, .05);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 2px 5px;
+  white-space: nowrap;
+}
+
+button { font: inherit; color: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
