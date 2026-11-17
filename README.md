@@ -1,5 +1,7 @@
 # LingoLens
 
+<p align="center"><b>中文</b> · <a href="README.en.md">English</a></p>
+
 **Windows 上的英文随手查 + 实时字幕。** 在浏览器、游戏、PDF 里遇到英文，一个快捷键就查清楚；听英文时，还能实时出中文字幕，字幕里的词点一下就能查。
 
 四个入口共用一套离线词库和一套卡片界面，翻译与解释走 DeepSeek API。
